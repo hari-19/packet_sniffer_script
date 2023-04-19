@@ -33,5 +33,5 @@ if __name__ == '__main__':
     #    sys.exit()
     # else:
     #    command = sys.argv[1]
-    command = "ALL"
+    command = "A"
     snie_main(command)

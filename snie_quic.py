@@ -1,5 +1,7 @@
 
 def sne_quic_extract_pkt_info(packet):
+    tls_extension_version = 0x0a
+    tls_version = 0x0a
     llayer = dir(packet['quic'])
     # print("QUIC layer info : " + str(llayer))
     sni = 'NA'
@@ -17,14 +19,24 @@ def sne_quic_extract_pkt_info(packet):
     else:
         sport = dport = 0
 
-    # print("QUIC packet : " + str(dir(packet['quic'])))
+    if "tls_handshake_extensions_supported_version" in llayer:
+        tls_extension_version = packet['quic'].tls_handshake_extensions_supported_version
     if "tls_handshake_version" in llayer:
+        #print("QUIC packet : " + str(dir(packet['quic'])))
+        #exit(0)
         tls_version = packet['quic'].tls_handshake_version
     if 'tls_handshake_extensions_server_name' in llayer:
         sni = packet['quic'].tls_handshake_extensions_server_name
     # else:
     #    print("SNI not present")
     # print("QUIC SNI = " + str(sni))
+    #print(tls_extension_version)
+    #print(f"old{tls_version}")
+    if tls_version != 'NA':
+        final_version = max(int(str(tls_extension_version),16),int(str(tls_version),16))
+        final_version = str(hex(final_version));
+        final_version = f"{final_version[:2]}0{final_version[2:]}"
+        tls_version = final_version
     return saddr, daddr, sport, dport, sni, qlen, tstamp, tls_version
 
 

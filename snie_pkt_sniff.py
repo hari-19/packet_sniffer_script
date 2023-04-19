@@ -12,8 +12,8 @@ warnings.filterwarnings(action= 'ignore')
 load_layer("tls")
 from scapy.layers.inet import IP, TCP
 import csv
-
-STO = 15 # Sniffing period in Seconds
+from rich.pretty import pprint
+STO = 30 # Sniffing period in Seconds
 
 pkt_count = 0
 pkts = []
@@ -390,6 +390,8 @@ def snie_fill_cert_info(tls_msg):
 
 def snie_fill_ch_info(fp, tls_msg, sni_info):
     #print("Printing TLS SNI info" + "\n")
+    #print(tls_msg)
+    #exit(0)
     ver = TLS_VERSIONS.get(tls_msg.version, "NA")
     sni_info[1] = str(ver)
     snil = ["NA"]
@@ -416,17 +418,33 @@ def snie_fill_ch_info(fp, tls_msg, sni_info):
 
 def snie_get_tls_proto_info(fp, packet, sni_info):
     from pyshark.packet.fields import LayerField
+    tls_extension_version = 0x0a
+    tls_version = 0x0a
     if int(packet['tcp'].dstport) == 443 or int(packet['tcp'].srcport) == 443:  # Encrypted TCP packet
         if 'tls' in packet:
             for layer in packet:
                 if layer.layer_name == "tls":
                     llayer = dir(layer)
+                    #print(llayer)
+                    if "handshake_extensions_supported_version" in llayer:
+                        tls_extension_version = layer.handshake_extensions_supported_version
+                        #print(type(tls_extension_version))
+                        #print(tls_extension_version)
+                    #exit(0)
                     if "record_version" in llayer:
                         tls_version = layer.record_version
-                        sni_info[1] = TLS_VERSIONS.get(tls_version, "NA")
+                        #print(tls_version)
                     if 'handshake_extensions_server_name' in llayer:
                         sni = layer.handshake_extensions_server_name.showname.replace("Server Name: ", "")
                         sni_info[2] = sni
+                    final_version = max(int(str(tls_extension_version),16),int(str(tls_version),16))
+                    final_version = str(hex(final_version));
+                    final_version = f"{final_version[:2]}0{final_version[2:]}"
+                    #print(f"old{tls_version}")
+                    sni_info[1] = TLS_VERSIONS.get(final_version, "NA")
+                    #print(sni_info[1])
+                    #if(sni_info[1] == "TLS_1_3"):
+                        #print("TLS_1_3")
     return sni_info
 
 
@@ -696,8 +714,8 @@ def snie_process_raw_packets(reader, dreader, raw_pkts, MAX_PKT_COUNT):
                 print("Execution interrupted")
                 exit(0)
             pkt_count += 1
-            print("[+] Number of packets processed : TCP = " + str(tcp_count) + "  UDP = " + str(udp_count) + \
-                  "  QUIC = " + str(quic_count) + "  Total = " + str(pkt_count), end="\r")
+            #print("[+] Number of packets processed : TCP = " + str(tcp_count) + "  UDP = " + str(udp_count) + \
+                  #"  QUIC = " + str(quic_count) + "  Total = " + str(pkt_count), end = "\r")
         if MAX_PKT_COUNT != "NA" and pkt_count >= MAX_PKT_COUNT:
             break
     fp.close()
@@ -780,16 +798,16 @@ def snie_record_and_process_pkts(command):
     global itime
     MAX_PKT_COUNT = "NA" # "NA : no bound"
     is_ps_stop.clear()
-    
+    #print("[+] Analyser started ")
+    #snie_process_packets(MAX_PKT_COUNT, STO)
+    #print("[+] Analyser finished ")
+    #print("[+] Analyser output stored in ./Output_data/snie.csv")
     if command == "S":
-       snie_sniff_packets(STO)
+        snie_sniff_packets(STO)
     elif command == "A":
-        print("[+] Analyser started ")
-        print("[+] Analyser finished ")
-        print("[+] Analyser output stored in ./Output_data/snie.csv")
-        snie_process_packets(MAX_PKT_COUNT, STO)
+       snie_process_packets(MAX_PKT_COUNT, STO)
     elif command == "ALL":
         snie_sniff_packets(STO)
         snie_process_packets(MAX_PKT_COUNT, STO)
     else:
-        print("Unknown command : Use S/A/ALL")
+      print("Unknown command : Use S/A/ALL")
