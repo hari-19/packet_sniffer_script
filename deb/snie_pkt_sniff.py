@@ -700,14 +700,14 @@ def snie_process_raw_packets(reader, dreader, raw_pkts, MAX_PKT_COUNT):
                 if 'tcp' in packet:
                     x = snie_handle_tcp(fp, dreader, packet)
                     tcp_count += 1
-                elif 'udp' in packet:  # UDP packet
-                    x = snie_handle_udp_packet(fp, dreader, packet)
-                    udp_count += 1
-                if 'quic' in packet:  # QUIC packet
+                elif 'quic' in packet:  # QUIC packet
                     from snie_quic import sne_quic_extract_pkt_info
                     saddr, daddr, sport, dport, sni, qlen, tstamp, tls_version = sne_quic_extract_pkt_info(packet)
                     snie_record_quic_info(saddr, daddr, sport, dport, sni, qlen, tstamp, tls_version)
                     quic_count += 1
+                elif 'udp' in packet:  # UDP packet
+                    x = snie_handle_udp_packet(fp, dreader, packet)
+                    udp_count += 1
                 else:
                     x = snie_handle_other_packet(fp, dreader, packet)
             except KeyboardInterrupt:
