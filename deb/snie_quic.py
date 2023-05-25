@@ -1,6 +1,6 @@
 import pyshark
 
-def decrypt_payload(dcid, payload_string):
+def decrypt_payload(dcid, payload_string,  packet_number):
     import hkdf
     from binascii import unhexlify, hexlify
     import hashlib
@@ -21,37 +21,37 @@ def decrypt_payload(dcid, payload_string):
     key = hkdf.hkdf_expand(client_initial_secret, unhexlify(quic_key), 16, hash=hashlib.sha256)
     iv = hkdf.hkdf_expand(client_initial_secret, unhexlify(quic_iv), 12, hash=hashlib.sha256)
     hp = hkdf.hkdf_expand(client_initial_secret, unhexlify(quic_hp), 16, hash=hashlib.sha256)
-
+    iv = hexlify(iv)
+    nonce = packet_number ^ int(iv,16)
+    nonce = hex(nonce)[2:]
+    nonce = unhexlify(nonce)
     # print(len(payload_string))
     tag = unhexlify(payload_string[-32:])
     payload_string = payload_string[:-32]
 
 
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    cipher = Cipher(algorithms.AES(key), modes.GCM(iv, tag), backend=None)
-
-    print(len(tag))
-    # print(payload_string)
-    # print(hexlify(tag))
+    cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), backend=None)
     
     decryptor = cipher.decryptor()
 
+    final = decryptor.update(unhexlify(payload_string)) # + decryptor.finalize()
+    print(len(final))
+    return final
 
 
-    final = decryptor.update(unhexlify(payload_string)) + decryptor.finalize()
-
-    print(hexlify(final))
-
-
-    
-# 
 def sne_quic_extract_pkt_info(packet):
-    tls_extension_version = 0x0a
-    tls_version = 0x0a
+    if 'quic' not in packet:
+        return None
+    print(packet['quic'].long_packet_type)
+    if packet['quic'].long_packet_type != '0': # 0 is for Initial Packet frame
+        return None
+    
     dcid = packet['quic'].dcid
     payload_string = packet['quic'].payload
-
-    decrypt_payload(dcid, payload_string)
+    packet_number = packet['quic'].packet_number
+    print(packet_number)
+    decrypt_payload(dcid, payload_string, int(packet_number))
 
     
 
