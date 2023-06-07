@@ -123,10 +123,11 @@ def sni_quic_extract_custom(packet):
     payload_string = packet['quic'].payload
     packet_number = packet['quic'].packet_number
 
-    if packet_number != '1':
-        # Because we are only interested in the first packet
-        # Also, decryption algo doesn't work for any other packet number, to be checked later
-        return 'NA'
+    # if packet_number != '1':
+    #     # Because we are only interested in the first packet
+    #     # Also, decryption algo doesn't work for any other packet number, to be checked later
+    #     return 'NA'
+    # Commented above because we are not sure if the first packet is always the first packet number (pkt no 0 was observerd in some cases)
     
     payload = decrypt_payload(dcid, payload_string, int(packet_number))
     
@@ -156,7 +157,8 @@ def sni_quic_extract_custom(packet):
 
             continue
         else:
-            raise Exception("Unknown Frame Type", byteString)
+            # raise Exception("Unknown Frame Type", byteString)
+            return 'NA' # Unknown Frame Type - either not a client Hello or not first Quic Initial Packet (decryption won't work)
 
     cryptoList.sort()
     cryptoData = b'' # Rearrangned Crypto Data
