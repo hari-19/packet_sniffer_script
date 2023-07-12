@@ -64,6 +64,11 @@ def generate_udp_dict_key(packet):
 def generate_quic_dict_key(saddr, daddr, sport, dport):
     return "QUIC" + "-" + str(saddr) + "-" + str(daddr) + "-" + str(sport) + "-" + str(dport)
 
+def generate_other_dict_key(packet):
+    return str(packet['ip'].proto) + "-" + str(packet['ip'].src) + "-" + str(packet['ip'].dst)
+            
+
+
 def snie_get_host():
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -90,8 +95,8 @@ def snie_read_raw_pkts(STO, fname):
     if fname == None:
         fname = "./Input_data/pkts_" + str(STO) + ".pcap"
     print("[+] Reading packets from " + str(fname))
-    pkts = pyshark.FileCapture(fname, display_filter="(ip.addr eq 142.250.183.36 and ip.addr eq 10.7.55.152) and (udp.port eq 443 and udp.port eq 53520)")
-    # pkts = pyshark.FileCapture(fname)
+    # pkts = pyshark.FileCapture(fname, display_filter="(ip.addr eq 142.250.183.36 and ip.addr eq 10.7.55.152) and (udp.port eq 443 and udp.port eq 53520)")
+    pkts = pyshark.FileCapture(fname)
     print("[+] Reading done")
     return pkts
 
@@ -293,68 +298,18 @@ def snie_get_other_prot_info(packet):
 
 
 def snie_update_other_data(dreader, packet):
-    fe = open("./Output_data/e.txt", "a")
-    f2 = open('./Output_data/snie_temp.csv', 'w', newline='')
-    writer = csv.writer(f2)
-    dwriter = csv.DictWriter(f2, fieldnames=csv_header)
-    writer.writerow(csv_header)
-    pcount = 0
-    rcount = 0
-    add_pkt = True
-    f1 = open('./Output_data/snie.csv', 'r')
-    reader = csv.reader(f1)
-    dreader = csv.DictReader(f1, fieldnames=csv_header)
-    for row in dreader:
-        fe.write("Row :" + str(row) + "\n")
-        rcount += 1
-        output_data = " P (Other): " + str(packet['ip'].src) + ":" + str(packet['ip'].dst) \
-                      #+ ":" + str(packet[UDP].sport) + ":" + str(packet[UDP].dport) + "\n"
-        fe.write(output_data)
-        output_data = " F (OTher): " + row["Source IP address"] + ":" + row["Destination IP address"] \
-                      # + ":" + row["Source port"] + ":" + row["Destination Port"] + "\n"
-        fe.write(output_data)
-        if "Protocol" == str(row["Protocol"]):
-            continue
-        pcount += 1
-        if ((str(packet['ip'].src) == row["Source IP address"] and
-             str(packet['ip'].dst) == row["Destination IP address"]) and
-            str(packet['ip'].proto == row["Protocol"])):
-            #print("row " + str(row))
-            osize = int(row["Downloaded Data size (bytes)"])
-            psize = snie_get_otherpayloadlen(packet)
-            dsize = osize + psize
-            row['Downloaded Data size (bytes)'] = dsize
-            dwriter.writerow(row)
-            fe.write("UDP packet updated\n")
-            add_pkt = False
-        else:
-            dwriter.writerow(row)
-    f1.close()
-    if add_pkt:
-        rcount += 1
+    if generate_other_dict_key(packet) in processed_data.keys():
+        row = generate_row_dict(processed_data[generate_other_dict_key(packet)])
+        osize = int(row["Downloaded Data size (bytes)"])
+        psize = snie_get_otherpayloadlen(packet)
+        dsize = osize + psize
+        row['Downloaded Data size (bytes)'] = dsize
+        processed_data[generate_other_dict_key(packet)] = generate_list_from_dict(row)
+    else:
         sni_info = snie_get_other_prot_info(packet)
-        writer.writerow(sni_info)
-        fe = open("./Output_data/e.txt", "a")
-        fe.write("New pkt info : " + str(sni_info) + "\n")
-        fe.write("new Other packet added" + "\n")
-    f2.close()
-
-    os.chdir('Output_data')
-    os.system('del snie.csv')
-    os.system('ren snie_temp.csv snie.csv')
-    os.chdir('..')
-
-    # os.system('cp ./Output_data/snie_temp.csv ./Output_data/snie.csv')
-    fe.write("Number of rows : " + str(rcount) + "\n")
-    fe.close()
-    return add_pkt
-
+        processed_data[generate_other_dict_key(packet)] = sni_info
 
 def snie_handle_other_packet(fp, dreader, packet):
-    from shutil import copy
-    fe = open("./Output_data/e.txt", "a")
-    fe.write("\n\n New other packet received \n ")
-    fe.close()
     snie_update_other_data(dreader, packet)
     return packet
 
