@@ -62,13 +62,32 @@ def snie_sniff_packets(STO):
     wrpcap(fname, capture)
 
 
-def snie_read_raw_pkts(STO):
-    fname = "./Input_data/pkts_" + str(STO) + ".pcap"
+def snie_read_raw_pkts(STO, fname):
+    if fname == None:
+        fname = "./Input_data/pkts_" + str(STO) + ".pcap"
     print("[+] Reading packets from " + str(fname))
+    # pkts = pyshark.FileCapture(fname, display_filter="(ip.addr eq 142.250.66.3 and ip.addr eq 10.7.55.152) and (tcp.port eq 443 and tcp.port eq 58723)")
     pkts = pyshark.FileCapture(fname)
     print("[+] Reading done")
     return pkts
 
+TLS_VERSIONS_REVRRSE_MAP = {
+    # SSL
+    "SSL_2_0": 0x0002,
+    "SSL_3_0": 0x0300 ,
+    # TLS:
+    "TLS_1_0": 0x0301,
+    "TLS_1_1": 0x0302,
+    "TLS_1_2": 0x0303,
+    "TLS_1_3": 0x0304,
+    # DTLS
+    "PROTOCOL_DTLS_1_0_OPENSSL_PRE_0_9_8f": 0x0100,
+    "TLS_1_3_DRAFT_16": 0x7f10,
+    "TLS_1_3_DRAFT_18": 0x7f12,
+    "DTLS_1_0": 0xfeff,
+    "DTLS_1_1": 0xfefd,
+    # Misc
+}
 
 TLS_VERSIONS = {
     # SSL
@@ -452,6 +471,8 @@ def snie_get_tls_proto_info(fp, packet, sni_info):
                     if 'handshake_extensions_server_name' in llayer:
                         sni = layer.handshake_extensions_server_name.showname.replace("Server Name: ", "")
                         sni_info[2] = sni
+                    # print("TLS version : " + str(tls_version))
+                    # print("TLS Handshake version : " + str(tls_extension_version))
                     final_version = max(int(str(tls_extension_version),16),int(str(tls_version),16))
                     final_version = str(hex(final_version));
                     final_version = f"{final_version[:2]}0{final_version[2:]}"
@@ -464,7 +485,9 @@ def snie_get_tls_proto_info(fp, packet, sni_info):
 
 
 def snie_update_tls_info(row, sni_info):
-    row["TLS version"] = sni_info[1]
+    if(row["TLS version"] == 'NA' or  TLS_VERSIONS_REVRRSE_MAP[row["TLS version"]] < TLS_VERSIONS_REVRRSE_MAP[sni_info[1]]):
+        print("From Update TLS Info: ", row["TLS version"], sni_info[1])
+        row["TLS version"] = sni_info[1]
     for sni in sni_info[2]:
         if "NA" in row["SNI"]:
             row["SNI"] = str(sni)
@@ -788,7 +811,7 @@ def snie_sanitize_data():
 
 
 
-def snie_process_packets(MAX_PKT_COUNT, STO):
+def snie_process_packets(MAX_PKT_COUNT, STO, fname):
     # Process packets
     if not os.path.exists("./Output_data/sni.txt"):
         os.system('echo > ./Output_data/sni.txt')
@@ -814,7 +837,7 @@ def snie_process_packets(MAX_PKT_COUNT, STO):
     sd_pkts = None
     while itr == 1:
         itr += 1
-        raw_pkts = snie_read_raw_pkts(STO)
+        raw_pkts = snie_read_raw_pkts(STO, fname)
         if raw_pkts is None:
             print("Too few packets to sniff")
             is_ps_stop.set()
@@ -829,7 +852,7 @@ def snie_process_packets(MAX_PKT_COUNT, STO):
     return
 
 
-def snie_record_and_process_pkts(command):
+def snie_record_and_process_pkts(command, fname):
     global is_ps_stop
     global itime
     MAX_PKT_COUNT = "NA" # "NA : no bound"
@@ -838,7 +861,9 @@ def snie_record_and_process_pkts(command):
     #snie_process_packets(MAX_PKT_COUNT, STO)
     #print("[+] Analyser finished ")
     #print("[+] Analyser output stored in ./Output_data/snie.csv")
-    if command == "S":
+    if fname != None:
+        snie_process_packets(MAX_PKT_COUNT, STO, fname)
+    elif command == "S":
         snie_sniff_packets(STO)
     elif command == "A":
        snie_process_packets(MAX_PKT_COUNT, STO)
