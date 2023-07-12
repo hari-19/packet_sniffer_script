@@ -58,6 +58,9 @@ processed_data = {}
 def generate_tcp_dict_key(packet):
     return "TCP" + "-" + str(packet['ip'].src) + "-" +str(packet['ip'].dst) + "-" +str(packet['tcp'].srcport) + "-" + str(packet['tcp'].dstport)
 
+def generate_quic_dict_key(saddr, daddr, sport, dport):
+    return "QUIC" + "-" + str(saddr) + "-" + str(daddr) + "-" + str(sport) + "-" + str(dport)
+
 def snie_get_host():
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -84,7 +87,7 @@ def snie_read_raw_pkts(STO, fname):
     if fname == None:
         fname = "./Input_data/pkts_" + str(STO) + ".pcap"
     print("[+] Reading packets from " + str(fname))
-    pkts = pyshark.FileCapture(fname, display_filter="(ip.addr eq 142.250.66.3 and ip.addr eq 10.7.55.152) and (tcp.port eq 443 and tcp.port eq 58723)")
+    pkts = pyshark.FileCapture(fname, display_filter="(ip.addr eq 142.250.183.36 and ip.addr eq 10.7.55.152) and (udp.port eq 443 and udp.port eq 53520)")
     # pkts = pyshark.FileCapture(fname)
     print("[+] Reading done")
     return pkts
@@ -530,7 +533,7 @@ def snie_update_tcp_data(fp, packet):
         ti = float(row['Time'])
         te = float(packet.sniff_timestamp)
         tdiff = te - ti
-        
+
         row["TLS session duration (s)"] = tdiff
         # Update TLS duration
         sni_info = ["NA", "NA", ["NA"]]
@@ -633,82 +636,23 @@ def snie_handle_tcp_packet(fp, packet):
 
 
 def snie_record_quic_info(saddr, daddr, sport, dport, sni, len, tstamp, tls_version):
-    fe = open("./Output_data/e.txt", "a")
-    f2 = open('./Output_data/snie_temp.csv', 'w', newline='')
-    writer = csv.writer(f2)
-    dwriter = csv.DictWriter(f2, fieldnames=csv_header)
-    writer.writerow(csv_header)
-    flow_id = str(saddr) + "_" + str(daddr) + "_" + str(sport) + "_" \
-              + str(dport)
-    # print("Flow id : " + str(flow_id) + str(reader))
-    pcount = 0
-    rcount = 0
-    add_pkt = True
-    f1 = open('./Output_data/snie.csv', 'r')
-    reader = csv.reader(f1)
-    dreader = csv.DictReader(f1, fieldnames=csv_header)
-    for row in dreader:
-        fe.write("Row :" + str(row) + "\n")
-        rcount += 1
-        output_data = " P (UDP): " + str(saddr) + ":" + str(daddr) + ":" + str(sport) + ":" + \
-                      str(dport) + "\n"
-        fe.write(output_data)
-        output_data = " F (UDP): " + row["Source IP address"] + ":" + row["Destination IP address"] + ":" + \
-                      row["Source port"] + ":" + row["Destination Port"] + "\n"
-        fe.write(output_data)
-        if "Protocol" == str(row["Protocol"]):
-            continue
-        if "QUIC" != str(row["Protocol"]):
-            fe.write("Non-UDP row \n")
-            dwriter.writerow(row)
-            continue
-        pcount += 1
-        if ((str(saddr) == row["Source IP address"] and
-             str(daddr) == row["Destination IP address"]) ) and \
-                ((str(sport) == row["Source port"] and
-                  str(dport) == row["Destination Port"])):
-            # Update data size
-            osize = int(row["Downloaded Data size (bytes)"])
-            psize = len*8
-            dsize = osize + psize
-            row['Downloaded Data size (bytes)'] = str(dsize)
-            # Update data size
-            # Update TLS duration
-            ti = float(row['Time'])
-            te = float(tstamp)
-            tdiff = te - ti
-            # tdiff = tdiff.total_seconds()
-            row["TLS session duration (s)"] = tdiff
-            # Update TLS duration
-            dwriter.writerow(row)
-            fe.write("UDP packet updated\n")
-            add_pkt = False
-        else:
-            dwriter.writerow(row)
-    f1.close()
-    if add_pkt:
-        rcount += 1
+    if generate_quic_dict_key(saddr, daddr, sport, dport) in processed_data.keys():
+        row = generate_row_dict(processed_data[generate_quic_dict_key(saddr, daddr, sport, dport)])
+        osize = int(row["Downloaded Data size (bytes)"])
+        psize = len*8
+        dsize = osize + psize
+        row['Downloaded Data size (bytes)'] = str(dsize)
+        # Update data size
+        # Update TLS duration
+        ti = float(row['Time'])
+        te = float(tstamp)
+        tdiff = te - ti
+        # tdiff = tdiff.total_seconds()
+        row["TLS session duration (s)"] = tdiff
+        processed_data[generate_quic_dict_key(saddr, daddr, sport, dport)] = generate_list_from_dict(row)
+    else:
         sni_info = snie_get_quic_prot_info(saddr, daddr, sport, dport, sni, len*8, tstamp, tls_version)
-        # print("QUIC SNI Info : " + str(sni_info))
-        writer.writerow(sni_info)
-        fe = open("./Output_data/e.txt", "a")
-        #print("new UDP packet added")
-        fe.write("New pkt info : " + str(sni_info) + "\n")
-        fe.write("new QUIC packet added" + "\n")
-    f2.close()
-
-    os.chdir('Output_data')
-    os.system('del snie.csv')
-    os.system('ren snie_temp.csv snie.csv')
-    os.chdir('..')
-
-
-    # os.system('cp ./Output_data/snie_temp.csv ./Output_data/snie.csv')
-    fe.write("Number of rows : " + str(rcount) + "\n")
-    #print("Number of rows : " + str(rcount))
-    fe.close()
-    return add_pkt
-
+        processed_data[generate_quic_dict_key(saddr, daddr, sport, dport)] = sni_info
 
 def snie_process_raw_packets(raw_pkts, MAX_PKT_COUNT):
     sd_pkts = []
