@@ -627,25 +627,23 @@ def snie_sanitize_data():
     os.system('ren snie_s.csv snie.csv')
     os.chdir('..')
 
+def snie_sanitize_data_list(data_list):
+    for line in data_list:
+        if line == []:
+            continue
 
+        if line[2] != "NA":
+            sni = line[2]
+            sni = sni.replace(" ", "")
+            snil = list(sni.replace(",", ""))
+            sni = ""
+            for item in snil:
+                if item != ",":
+                    sni += item
+            line[2] = sni
 
 def snie_process_packets(MAX_PKT_COUNT, STO, fname):
-    # Process packets
-    if not os.path.exists("./Output_data/sni.txt"):
-        os.system('echo > ./Output_data/sni.txt')
-    fp = open('./Output_data/sni.txt', 'w', newline='')
-    fp.close()
-    # Open reader file
-    if os.path.exists('./Output_data/snie.csv'):
-        os.chdir('Output_data')
-        os.system('del snie.csv')
-        os.chdir('..')
-        os.system('type nul > ./Output_data/snie.csv')
-    else:
-        os.system('type nul > ./Output_data/snie.csv')
- 
     itr = 1
-
     while itr == 1:
         itr += 1
         raw_pkts = snie_read_raw_pkts(STO, fname)
@@ -658,7 +656,15 @@ def snie_process_packets(MAX_PKT_COUNT, STO, fname):
         except (KeyboardInterrupt, SystemExit):
             is_ps_stop.set()
             break
-    snie_sanitize_data()
+    processed_data_list = []
+
+    for key in processed_data:
+        processed_data_list.append(processed_data[key])       
+
+    snie_sanitize_data_list(processed_data_list)
+
+    pprint(processed_data_list)
+
     return
 
 
@@ -679,4 +685,4 @@ def snie_record_and_process_pkts(command, fname):
     else:
       print("Unknown command : Use S/A/ALL")
 
-    pprint(processed_data)
+    # pprint(processed_data)
