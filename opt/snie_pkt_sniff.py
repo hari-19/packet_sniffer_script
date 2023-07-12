@@ -25,6 +25,20 @@ tcp_count = 0
 udp_count = 0
 quic_count = 0
 
+header_index = {
+    "Time": 0,
+    "TLS version": 1,
+    "SNI": 2,
+    "Source IP address": 3,
+    "Destination IP address": 4,
+    "Source port": 5,
+    "Destination Port": 6,
+    "Protocol": 7,
+    "Downloaded Data size (bytes)": 8,
+    "TLS session duration (s)": 9,
+    "Foreground/Background": 10,
+    "SSL Certificate information": 11
+}
 header = ["Time", "TLS version", "SNI", "Source IP address", "Destination IP address", "Source port",
           "Destination Port", "Protocol", "Downloaded Data size (bytes)", "TLS session duration (s)",
           "Foreground/Background", "SSL Certificate information"]
@@ -39,6 +53,10 @@ csv_header = {"Time": "Time", "TLS version": "TLS version", "SNI": "SNI", "Sourc
 
 data_size = {}
 
+processed_data = {}
+
+def generate_tcp_dict_key(packet):
+    return "TCP" + "-" + str(packet['ip'].src) + "-" +str(packet['ip'].dst) + "-" +str(packet['tcp'].srcport) + "-" + str(packet['tcp'].dstport)
 
 def snie_get_host():
     import socket
@@ -66,8 +84,8 @@ def snie_read_raw_pkts(STO, fname):
     if fname == None:
         fname = "./Input_data/pkts_" + str(STO) + ".pcap"
     print("[+] Reading packets from " + str(fname))
-    # pkts = pyshark.FileCapture(fname, display_filter="(ip.addr eq 142.250.66.3 and ip.addr eq 10.7.55.152) and (tcp.port eq 443 and tcp.port eq 58723)")
-    pkts = pyshark.FileCapture(fname)
+    pkts = pyshark.FileCapture(fname, display_filter="(ip.addr eq 142.250.66.3 and ip.addr eq 10.7.55.152) and (tcp.port eq 443 and tcp.port eq 58723)")
+    # pkts = pyshark.FileCapture(fname)
     print("[+] Reading done")
     return pkts
 
@@ -498,92 +516,49 @@ def snie_update_tls_info(row, sni_info):
     return row
 
 
-def snie_update_tcp_data(fp, dreader, packet):
+def snie_update_tcp_data(fp, packet):
     if not 'tcp' in packet:
         return
-    fe = open("./Output_data/e.txt", "a")
-    f2 = open('./Output_data/snie_temp.csv', 'w', newline='')
-    writer = csv.writer(f2)
-    dwriter = csv.DictWriter(f2, fieldnames=csv_header)
-    writer.writerow(csv_header)
-    flow_id = str(packet['ip'].src) + "_" + str(packet['ip'].dst) + "_" + str(packet['tcp'].srcport) + "_" \
-              + str(packet['tcp'].dstport)
-    # print("Flow id : " + str(flow_id) + str(reader))
-    pcount = 0
-    rcount = 0
-    add_pkt = True
-    f1 = open('./Output_data/snie.csv', 'r')
-    reader = csv.reader(f1)
-    dreader = csv.DictReader(f1, fieldnames=csv_header)
-    for row in dreader:
-        fe.write("Row :" + str(row) + "\n")
-        rcount += 1
-        output_data = " P (TCP): " + str(packet['ip'].src) + ":" + str(packet['ip'].dst) + ":" + str(
-            packet['tcp'].srcport) + ":" + \
-                      str(packet['tcp'].dstport) + "\n"
-        fe.write(output_data)
-        output_data = " F (TCP): " + row["Source IP address"] + ":" + row["Destination IP address"] + ":" + \
-                      row["Source port"] + ":" + row["Destination Port"] + "\n"
-        fe.write(output_data)
-        if "Protocol" == str(row["Protocol"]):
-            continue
-        if "TCP" != str(row["Protocol"]):
-            fe.write("Non-TCP row \n")
-            dwriter.writerow(row)
-            continue
-        pcount += 1
-        if ((str(packet['ip'].src) == row["Source IP address"] and
-             str(packet['ip'].dst) == row["Destination IP address"])) and \
-                ((str(packet['tcp'].srcport) == row["Source port"] and
-                  str(packet['tcp'].dstport) == row["Destination Port"])):
-            osize = int(row["Downloaded Data size (bytes)"])
-            psize = snie_get_tcppayloadlen(packet)
-            dsize = osize + psize
-            row['Downloaded Data size (bytes)'] = dsize
-            # Update TLS duration
-            ti = float(row['Time'])
-            te = float(packet.sniff_timestamp)
-            tdiff = te - ti
-            # tdiff = tdiff.total_seconds()
-            row["TLS session duration (s)"] = tdiff
-            # Update TLS duration
-            sni_info = ["NA", "NA", ["NA"]]
-            sni_info = snie_get_tls_proto_info(fp, packet, sni_info)
-            if sni_info[1] != "NA":
-                row = snie_update_tls_info(row, sni_info)
-            dwriter.writerow(row)
-            fe.write("TCP packet updated\n")
-            add_pkt = False
-        else:
-            dwriter.writerow(row)
-    f1.close()
-    if add_pkt:
-        rcount += 1
+    
+    if generate_tcp_dict_key(packet) in processed_data.keys():
+        row = generate_row_dict(processed_data[generate_tcp_dict_key(packet)])
+        osize = int(row["Downloaded Data size (bytes)"])
+        psize = snie_get_tcppayloadlen(packet)
+        dsize = osize + psize
+        row['Downloaded Data size (bytes)'] = dsize
+        # Update TLS duration
+        ti = float(row['Time'])
+        te = float(packet.sniff_timestamp)
+        tdiff = te - ti
+        
+        row["TLS session duration (s)"] = tdiff
+        # Update TLS duration
+        sni_info = ["NA", "NA", ["NA"]]
+        sni_info = snie_get_tls_proto_info(fp, packet, sni_info)
+        if sni_info[1] != "NA":
+            row = snie_update_tls_info(row, sni_info)
+        processed_data[generate_tcp_dict_key(packet)] = generate_list_from_dict(row)
+    else:
         sni_info = snie_get_tcp_prot_info(packet)
         sni_info = snie_get_tls_proto_info(fp, packet, sni_info)
-        writer.writerow(sni_info)
-        fe = open("./Output_data/e.txt", "a")
-        fe.write("New pkt info : " + str(sni_info) + "\n")
-        fe.write("new TCP packet added" + "\n")
-    f2.close()
+        processed_data[generate_tcp_dict_key(packet)] = sni_info
 
-    os.chdir('Output_data')
-    os.system('del snie.csv')
-    os.system('ren snie_temp.csv snie.csv')
-    os.chdir('..')
+def generate_row_dict(processed_packet_list):
+    row_dict = {}
+    for key in header_index.keys():
+        row_dict[key] = processed_packet_list[header_index[key]]
 
-    # os.system('cp ./Output_data/snie_temp.csv ./Output_data/snie.csv')
-    fe.write("Number of rows : " + str(rcount) + "\n")
-    fe.close()
-    return add_pkt
+    return row_dict
 
+def generate_list_from_dict(processed_packet_dict):
+    row_list = []
+    for key in header_index.keys():
+        row_list.append(processed_packet_dict[key])
 
-def snie_handle_tcp(fp, dreader, packet):
-    from shutil import copy
-    fe = open("./Output_data/e.txt", "a")
-    fe.write("\n\n New TCP packet received \n ")
-    fe.close()
-    snie_update_tcp_data(fp, dreader, packet)
+    return row_list
+
+def snie_handle_tcp(fp, packet):
+    snie_update_tcp_data(fp, packet)
     return packet
 
 
@@ -735,7 +710,7 @@ def snie_record_quic_info(saddr, daddr, sport, dport, sni, len, tstamp, tls_vers
     return add_pkt
 
 
-def snie_process_raw_packets(reader, dreader, raw_pkts, MAX_PKT_COUNT):
+def snie_process_raw_packets(raw_pkts, MAX_PKT_COUNT):
     sd_pkts = []
     fp = open('./Output_data/sni.txt', 'a', newline='')
     pkt_count = 0
@@ -753,13 +728,13 @@ def snie_process_raw_packets(reader, dreader, raw_pkts, MAX_PKT_COUNT):
                     snie_record_quic_info(saddr, daddr, sport, dport, sni, qlen, tstamp, tls_version)
                     quic_count += 1
                 elif 'tcp' in packet:
-                    x = snie_handle_tcp(fp, dreader, packet)
+                    x = snie_handle_tcp(fp, packet)
                     tcp_count += 1
                 elif 'udp' in packet:  # UDP packet
-                    x = snie_handle_udp_packet(fp, dreader, packet)
+                    x = snie_handle_udp_packet(fp, None, packet)
                     udp_count += 1
                 else:
-                    x = snie_handle_other_packet(fp, dreader, packet)
+                    x = snie_handle_other_packet(fp, None, packet)
             except KeyboardInterrupt:
                 print("Execution interrupted")
                 exit(0)
@@ -826,15 +801,7 @@ def snie_process_packets(MAX_PKT_COUNT, STO, fname):
         os.system('type nul > ./Output_data/snie.csv')
     else:
         os.system('type nul > ./Output_data/snie.csv')
-    f1 = open('./Output_data/snie.csv', 'r', newline='')
-    reader = csv.reader(f1)
-    dreader = csv.DictReader(f1, fieldnames=csv_header)
-    f1.close()
-    dreader = None
-
-    # Open writer file
-    fe = open("./Output_data/e.txt", "w")
-    fe.close()
+ 
     itr = 1
 
     while itr == 1:
@@ -845,11 +812,10 @@ def snie_process_packets(MAX_PKT_COUNT, STO, fname):
             is_ps_stop.set()
             break
         try:
-            sd_pkts = snie_process_raw_packets(reader, dreader, raw_pkts, MAX_PKT_COUNT)
+            snie_process_raw_packets(raw_pkts, MAX_PKT_COUNT)
         except (KeyboardInterrupt, SystemExit):
             is_ps_stop.set()
             break
-
     snie_sanitize_data()
     return
 
@@ -870,3 +836,5 @@ def snie_record_and_process_pkts(command, fname):
         snie_process_packets(MAX_PKT_COUNT, STO)
     else:
       print("Unknown command : Use S/A/ALL")
+
+    pprint(processed_data)
