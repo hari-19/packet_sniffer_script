@@ -58,6 +58,9 @@ processed_data = {}
 def generate_tcp_dict_key(packet):
     return "TCP" + "-" + str(packet['ip'].src) + "-" +str(packet['ip'].dst) + "-" +str(packet['tcp'].srcport) + "-" + str(packet['tcp'].dstport)
 
+def generate_udp_dict_key(packet):
+    return "UDP" + "-" + str(packet['ip'].src) + "-" +str(packet['ip'].dst) + "-" +str(packet['udp'].srcport) + "-" + str(packet['udp'].dstport)
+
 def generate_quic_dict_key(saddr, daddr, sport, dport):
     return "QUIC" + "-" + str(saddr) + "-" + str(daddr) + "-" + str(sport) + "-" + str(dport)
 
@@ -253,79 +256,19 @@ def snie_get_udp_prot_info(packet):
 def snie_update_udp_data(dreader, packet):
     if not 'udp' in packet:
         return
-    fe = open("./Output_data/e.txt", "a")
-    f2 = open('./Output_data/snie_temp.csv', 'w', newline='')
-    writer = csv.writer(f2)
-    dwriter = csv.DictWriter(f2, fieldnames=csv_header)
-    writer.writerow(csv_header)
-    flow_id = str(packet['ip'].src) + "_" + str(packet['ip'].dst) + "_" + str(packet['udp'].srcport) + "_" \
-              + str(packet['udp'].dstport)
-    # print("Flow id : " + str(flow_id) + str(reader))
-    pcount = 0
-    rcount = 0
-    add_pkt = True
-    f1 = open('./Output_data/snie.csv', 'r')
-    reader = csv.reader(f1)
-    dreader = csv.DictReader(f1, fieldnames=csv_header)
-    for row in dreader:
-        fe.write("Row :" + str(row) + "\n")
-        rcount += 1
-        output_data = " P (UDP): " + str(packet['ip'].src) + ":" + str(packet['ip'].dst) + ":" + str(
-            packet['udp'].srcport) + ":" + \
-                      str(packet['udp'].dstport) + "\n"
-        fe.write(output_data)
-        output_data = " F (UDP): " + row["Source IP address"] + ":" + row["Destination IP address"] + ":" + \
-                      row["Source port"] + ":" + row["Destination Port"] + "\n"
-        fe.write(output_data)
-        if "Protocol" == str(row["Protocol"]):
-            continue
-        if "UDP" != str(row["Protocol"]):
-            fe.write("Non-UDP row \n")
-            dwriter.writerow(row)
-            continue
-        pcount += 1
-        if ((str(packet['ip'].src) == row["Source IP address"] and
-             str(packet['ip'].dst) == row["Destination IP address"]) ) and \
-                ((str(packet['udp'].srcport) == row["Source port"] and
-                  str(packet['udp'].dstport) == row["Destination Port"])):
-            osize = int(row["Downloaded Data size (bytes)"])
-            psize = snie_get_udppayloadlen(packet)
-            dsize = osize + psize
-            row['Downloaded Data size (bytes)'] = dsize
-            # print("UDP Packet : " + str(row) + "\n")
-            dwriter.writerow(row)
-            fe.write("UDP packet updated\n")
-            add_pkt = False
-        else:
-            dwriter.writerow(row)
-    f1.close()
-    if add_pkt:
-        rcount += 1
-        sni_info = snie_get_udp_prot_info(packet)
-        # print("UDP Packet : " + str(sni_info) + "\n")
-        writer.writerow(sni_info)
-        fe = open("./Output_data/e.txt", "a")
-        #print("new UDP packet added")
-        fe.write("New pkt info : " + str(sni_info) + "\n")
-        fe.write("new UDP packet added" + "\n")
-    f2.close()
     
-    os.chdir('Output_data')
-    os.system('del snie.csv')
-    os.system('ren snie_temp.csv snie.csv')
-    os.chdir('..')
-    # os.system('cp ./Output_data/snie_temp.csv ./Output_data/snie.csv')
-    fe.write("Number of rows : " + str(rcount) + "\n")
-    #print("Number of rows : " + str(rcount))
-    fe.close()
-    return add_pkt
-
+    if generate_udp_dict_key(packet) in processed_data.keys():
+        row = generate_row_dict(processed_data[generate_udp_dict_key(packet)])
+        osize = int(row["Downloaded Data size (bytes)"])
+        psize = snie_get_udppayloadlen(packet)
+        dsize = osize + psize
+        row['Downloaded Data size (bytes)'] = dsize
+        processed_data[generate_udp_dict_key(packet)] = generate_list_from_dict(row)
+    else:
+        sni_info = snie_get_udp_prot_info(packet)
+        processed_data[generate_udp_dict_key(packet)] = sni_info
 
 def snie_handle_udp_packet(fp, dreader, packet):
-    from shutil import copy
-    fe = open("./Output_data/e.txt", "a")
-    fe.write("\n\n New UDP packet received \n ")
-    fe.close()
     snie_update_udp_data(dreader, packet)
     return packet
 
